@@ -1,7 +1,7 @@
 /*
  * kernel.cl: Vectorized OpenCL kernel
- * (c)2017-2018 Seiji Nishimura
- * $Id: kernel.cl,v 1.1.1.4 2018/09/09 00:00:00 seiji Exp seiji $
+ * (c)2017-2018,2021 Seiji Nishimura
+ * $Id: kernel.cl,v 1.1.1.5 2021/07/20 00:00:00 seiji Exp seiji $
  */
 
 #pragma OPENCL EXTENSION cl_khr_fp64 : enable
@@ -123,6 +123,7 @@ inline int4 mandelbrot(int iter_max, double4 p_r, double4 p_i)
 
 //----------------------------------------------------------------------
 inline bool detect_edge(__global uchar *pixmap, uchar4 *pixel, int x, int y, int width, int height)
+#if 1
 {
     *pixel = pixmap_get_pixel(pixmap, x, y, width);
 
@@ -136,6 +137,23 @@ inline bool detect_edge(__global uchar *pixmap, uchar4 *pixel, int x, int y, int
 
     return false;
 }
+#else				//......................................
+{
+    bool edge = false;
+
+    *pixel = pixmap_get_pixel(pixmap, x, y, width);
+
+    for (int j = max(0, y - 1); j <= min(height - 1, y + 1); j++)
+	for (int i = max(0, x - 1); i <= min(width - 1, x + 1); i++)
+	    if (i != x || j != y) {
+		uchar4 p = pixmap_get_pixel(pixmap, i, j, width);
+		if (!equivalent_color(*pixel, p))
+		    edge = true;
+	    }
+
+    return edge;
+}
+#endif
 
 //----------------------------------------------------------------------
 inline bool equivalent_color(uchar4 p, uchar4 q)
