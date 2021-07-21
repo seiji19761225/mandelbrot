@@ -1,7 +1,7 @@
 /*
- * cl_util.h: utilities for OpenCL parallel processing
- * (c)2017 Seiji Nishimura
- * $Id: cl_util.h,v 1.1.1.3 2020/07/30 00:00:00 seiji Exp seiji $
+ * cl_util.h: OpenCL utility
+ * (c)2017-2021 Seiji Nishimura
+ * $Id: cl_util.h,v 1.1.1.4 2021/07/21 00:00:00 seiji Exp seiji $
  */
 
 #ifndef __CL_UTIL_H__
@@ -35,15 +35,6 @@ typedef struct {
 } cl_obj_t;
 
 // macro functions to handle cl_obj_t
-#define cl_init(obj,dev_type,kernel,options) \
-{ \
-    cl_int stat; \
-    if ((stat = cl_Init(dev_type, \
-			&(obj)->device, &(obj)->program, \
-			&(obj)->queue , &(obj)->context, kernel, options)) != CL_SUCCESS) \
-	cl_CheckStatus("cl_Init", stat); \
-}
-#define cl_fin(obj)		cl_Fin(&(obj)->device, &(obj)->program, &(obj)->queue, &(obj)->context)
 #define cl_query_device(obj)	((obj)->device)
 #define cl_query_program(obj)	((obj)->program)
 #define cl_query_queue(obj)	((obj)->queue)
@@ -54,11 +45,8 @@ typedef struct {
 extern "C" {
 #endif
 
-CL_UTIL_API cl_int cl_Init       (cl_device_type    , cl_device_id *, cl_program *,
-				  cl_command_queue *, cl_context   *, const char *, const char *);
-CL_UTIL_API void   cl_Fin        (cl_device_id     *, cl_program   *,
-				  cl_command_queue *, cl_context   *);
-CL_UTIL_API void   cl_CheckStatus(const char *, cl_int);
+CL_UTIL_API void cl_init(cl_obj_t *, char *, cl_device_type, cl_uint, char *, char *);
+CL_UTIL_API void cl_fin (cl_obj_t *);
 
 #ifdef __cplusplus
 }

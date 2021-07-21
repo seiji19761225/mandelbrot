@@ -1,7 +1,7 @@
 /*
- * cl_util_internal.h: utilities for OpenCL parallel processing
- * (c)2017 Seiji Nishimura
- * $Id: cl_util_internal.h,v 1.1.1.1 2017/07/27 00:00:00 seiji Exp seiji $
+ * cl_util_internal.h: OpenCL utility
+ * (c)2017-2021 Seiji Nishimura
+ * $Id: cl_util_internal.h,v 1.1.1.2 2021/07/21 00:00:00 seiji Exp seiji $
  */
 
 #ifndef __CL_UTIL_INTERNAL__

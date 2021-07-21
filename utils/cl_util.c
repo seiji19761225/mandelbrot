@@ -1,88 +1,157 @@
 /*
- * cl_util.c: utilities for OpenCL parallel processing
- * (c)2017 Seiji Nishimura
- * $Id: cl_util.c,v 1.1.1.1 2017/07/27 00:00:00 seiji Exp seiji $
+ * cl_util.c: OpenCL utility
+ * (c)2017-2021 Seiji Nishimura
+ * $Id: cl_util.c,v 1.1.1.2 2021/07/21 00:00:00 seiji Exp seiji $
  */
 
-#include <math.h>
 #include <stdio.h>
-#include <assert.h>
-#include <stddef.h>
+#include <stdlib.h>
+#include <string.h>
 #include "cl_util_internal.h"
 
-#define N	(0x01<<8)
+typedef enum { BINARY, SOURCE } kernel_type_t;
 
-// prototype of internal procedures
-static char *_cl_load_kernel_src(const char *, size_t *);
+#define size(tbl)	(sizeof(tbl)/sizeof(tbl[0]))
+
+#define N_TBL	(0x01<<8)
+
+// prototypes
+static void          clCheckStatus_  (const char *, cl_int  );
+static char         *clLoadKernelSrc_(const char *, size_t *);
+static kernel_type_t clKernelType_   (const char *);
 
 //----------------------------------------------------------------------
-cl_int cl_Init
-	(cl_device_type dev_type, cl_device_id *device , cl_program *program,
-	 cl_command_queue *queue, cl_context   *context, const char *kernel , const char *build_options)
-{				// initalize OpenCL
-    cl_platform_id platform[N] = { NULL };
-    cl_device_id   dev_id  [N] = { NULL };
-    cl_int status, num_devices, num_platforms;
-    size_t kernel_size;
-    char  *kernel_src ;
+void cl_init
+	(cl_obj_t *obj, char *platform_name, cl_device_type device_type, cl_uint device_num,
+	 char  *kernel, char *build_options)
+{				// initialize OpenCL.
+    cl_platform_id platform[N_TBL];
+    cl_device_id   dev_id  [N_TBL];
+    cl_int  status     ;
+    cl_uint num_devices, num_platforms;
+    size_t  kernel_size;
+    char   *kernel_src ;
 
-    *device  = NULL;
-    *program = NULL;
-    *queue   = NULL;
-    *context = NULL;
+    obj->device  = NULL;
+    obj->program = NULL;
+    obj->queue   = NULL;
+    obj->context = NULL;
 
-    status = clGetPlatformIDs(N, platform, &num_platforms);
-    cl_CheckStatus("clGetPlatformIDs", status);
+    status = clGetPlatformIDs(size(platform), platform, &num_platforms);
+    clCheckStatus_("clGetPlatformIDs", status);
 
-    for (int i = 0; i < num_platforms; i++) {	// search all available platforms.
-	status = clGetDeviceIDs(platform[i], dev_type, N, dev_id, &num_devices);
-	if (num_devices > 0 &&
-	    status == CL_SUCCESS) {
-	    *device = dev_id[0];	// use 1st device.
-	    break;
+    if (platform_name == NULL) {	// no specified specific platform.
+	for (int i = 0; i < num_platforms; i++) {
+	    status = clGetDeviceIDs(platform[i], device_type, size(dev_id), dev_id, &num_devices);
+	    if (status != CL_DEVICE_NOT_FOUND)
+		clCheckStatus_("clGetDeviceIDs", status);
+	    if (num_devices > 0) {
+#ifdef DEBUG
+		char pname[256];
+		status = clGetPlatformInfo(platform[i], CL_PLATFORM_NAME, sizeof(pname), pname, NULL);
+		clCheckStatus_("clGetPlatformInfo", status);
+#endif
+		if (num_devices > device_num) {	// found the target device.
+#ifdef DEBUG
+		    char dname[256];
+		    status = clGetDeviceInfo(dev_id[device_num], CL_DEVICE_NAME,
+							sizeof(dname), dname, NULL);
+		    clCheckStatus_("clGetDeviceInfo", status);
+		    printf("OpenCL\n");
+		    printf("  Platform: %s\n", pname);
+		    printf("  Device  : %s\n", dname);
+#endif
+		    obj->device = dev_id[device_num];
+		    break;
+		} else {
+		    device_num -= num_devices;
+		}
+	    }
+	}
+    } else {				// specified specific platform.
+	char pname[256];
+	for (int i = 0; i < num_platforms; i++) {
+	    status = clGetPlatformInfo(platform[i], CL_PLATFORM_NAME, sizeof(pname), pname, NULL);
+	    clCheckStatus_("clGetPlatformInfo", status);
+	    if (strcasecmp(platform_name, pname) == 0) {	// found the target platform.
+		status = clGetDeviceIDs(platform[i], device_type, size(dev_id), dev_id, &num_devices);
+		if (status != CL_DEVICE_NOT_FOUND)
+		    clCheckStatus_("clGetDeviceIDs", status);
+		if (num_devices > 0) {
+		    if (num_devices > device_num) {	// found the target device.
+#ifdef DEBUG
+			char dname[256];
+			status = clGetDeviceInfo(dev_id[device_num], CL_DEVICE_NAME,
+								sizeof(dname), dname, NULL);
+			clCheckStatus_("clGetDeviceInfo", status);
+			printf("OpenCL\n");
+			printf("  Platform: %s\n", pname);
+			printf("  Device  : %s\n", dname);
+#endif
+			obj->device = dev_id[device_num];
+			break;
+		    } else {
+			device_num -= num_devices;
+		    }
+		}
+	    }
 	}
     }
 
-    if (*device == NULL) {	// could not find any appropriate device.
-	assert(dev_type != CL_DEVICE_TYPE_DEFAULT &&
-	       dev_type != CL_DEVICE_TYPE_ALL);
-	return CL_DEVICE_NOT_FOUND;
-    }
+    if (obj->device == NULL)	// could not find any appropriate device.
+	clCheckStatus_(__func__, CL_DEVICE_NOT_FOUND);
 
-    *context = clCreateContext     (NULL, 1, device, NULL, NULL, &status);
-    cl_CheckStatus("clCreateContext"          , status);
-    *queue   = clCreateCommandQueue(*context, *device, 0, &status);
-    cl_CheckStatus("clCreateCommandQueue"     , status);
+    obj->context = clCreateContext(NULL, 1, &obj->device, NULL, NULL, &status);
+    clCheckStatus_("clCreateContext", status);
+    obj->queue   = clCreateCommandQueue(obj->context, obj->device, 0, &status);
+    clCheckStatus_("clCreateCommandQueue", status);
 
-    if ((kernel_src = _cl_load_kernel_src(kernel, &kernel_size)) == NULL)
+    if ((kernel_src = clLoadKernelSrc_(kernel, &kernel_size)) == NULL)
 	exit(EXIT_FAILURE);
 
     // JIT compile OpenCL kernel
-    *program = clCreateProgramWithSource(*context, 1, (const char **) &kernel_src, &kernel_size, &status);
-    cl_CheckStatus("clCreateProgramWithSource", status);
-    status   = clBuildProgram           (*program, 1, device, build_options, NULL, NULL);
-    cl_CheckStatus("clBuildProgram"           , status);
+    if (clKernelType_(kernel) == SOURCE) {
+	obj->program = clCreateProgramWithSource
+			(obj->context, 1, (const char **) &kernel_src, &kernel_size, &status);
+	clCheckStatus_("clCreateProgramWithSource", status);
+    } else {	// clKernelType_(kernel) == BINARY
+	obj->program = clCreateProgramWithBinary
+			(obj->context, 1, &obj->device,
+			   &kernel_size, (const unsigned char **) &kernel_src, NULL, &status);
+	clCheckStatus_("clCreateProgramWithBinary", status);
+    }
+    status = clBuildProgram(obj->program, 1, &obj->device, build_options, NULL, NULL);
+    clCheckStatus_("clBuildProgram", status);
 
     free(kernel_src);
-
-    return CL_SUCCESS;
-}
-
-//----------------------------------------------------------------------
-void cl_Fin
-	(cl_device_id     *device, cl_program *program,
-	 cl_command_queue *queue , cl_context *context)
-{				// finalize OpenCL
-    clReleaseProgram     (*program);
-    clReleaseCommandQueue(*queue  );
-    clReleaseContext     (*context);
 
     return;
 }
 
 //----------------------------------------------------------------------
-void cl_CheckStatus(const char *message, cl_int status)
-{				// check returned status, and exit if error happend
+void cl_fin
+	(cl_obj_t *obj)
+{				// finalize OpenCL.
+    clReleaseProgram     (obj->program);
+    clReleaseCommandQueue(obj->queue  );
+    clReleaseContext     (obj->context);
+
+    return;
+}
+
+//----------------------------------------------------------------------
+static
+void clCheckStatus_
+	(const char *message, cl_int status)
+#ifdef NDEBUG
+{				// check status value, and exit if error happened.
+    if (status != CL_SUCCESS)
+	exit(status);
+
+    return;
+}
+#else				//......................................
+{				// check status value, and exit if error happened.
     if (status == CL_SUCCESS)
 	return;
 
@@ -142,10 +211,13 @@ void cl_CheckStatus(const char *message, cl_int status)
 
     return;
 }
+#endif
 
 //----------------------------------------------------------------------
-static char *_cl_load_kernel_src(const char *kernel, size_t *kernel_size)
-{				// load OpenCL kernel source code
+static
+char *clLoadKernelSrc_
+	(const char *kernel, size_t *kernel_size)
+{				// load OpenCL kernel source code.
     FILE *fp         = NULL;
     char *kernel_src = NULL;
 
@@ -170,4 +242,38 @@ static char *_cl_load_kernel_src(const char *kernel, size_t *kernel_size)
     fclose(fp);
 
     return kernel_src;
+}
+
+//----------------------------------------------------------------------
+static
+kernel_type_t clKernelType_(const char *fname)
+{				// detect file type of OpenCL kernel.
+    const struct {
+	char *suffix;
+	kernel_type_t type;
+    } type_table[] = {
+	{ ".bin", BINARY },
+	{ ".ir" , BINARY },
+	{ ".lib", BINARY },
+	{ ".out", BINARY },
+	{ ".cl" , SOURCE },
+	{ ".clc", SOURCE },
+	{ ".src", SOURCE },
+	{ ".txt", SOURCE }
+    };
+
+    kernel_type_t kernel_type = SOURCE;
+
+    size_t fname_length = strlen(fname);
+
+    for (int i = 0; i < size(type_table); i++) {
+	size_t suffix_length = strlen(type_table[i].suffix);
+	if (fname_length > suffix_length &&
+	    strcasecmp(&fname[fname_length - suffix_length], type_table[i].suffix) == 0) {
+	    kernel_type = type_table[i].type;
+	    break;
+	}
+    }
+
+    return kernel_type;
 }

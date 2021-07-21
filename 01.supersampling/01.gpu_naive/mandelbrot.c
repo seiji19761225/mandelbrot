@@ -1,7 +1,7 @@
 /*
  * mandelbrot.c
  * (c)2010-2018 Seiji Nishimura
- * $Id: mandelbrot.c,v 1.1.1.4 2020/07/30 00:00:00 seiji Exp seiji $
+ * $Id: mandelbrot.c,v 1.1.1.5 2021/07/21 00:00:00 seiji Exp seiji $
  */
 
 #include <pixmap.h>
@@ -28,7 +28,7 @@ int main(int argc, char **argv)
     pixmap_t image;
     pixel_t  colormap[ITER_MAX];
 
-    cl_init(&obj, OPENCL_DEVICE, KERNEL, options);
+    cl_init(&obj, NULL, OPENCL_DEVICE, 0, KERNEL, options);
 
     pixmap_create(&image, WIDTH, HEIGHT);
     colormap_init(colormap, ITER_MAX);
