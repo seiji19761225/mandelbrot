@@ -1,7 +1,7 @@
 /*
  * cl_util.h: OpenCL utility
  * (c)2017-2021 Seiji Nishimura
- * $Id: cl_util.h,v 1.1.1.4 2021/07/21 00:00:00 seiji Exp seiji $
+ * $Id: cl_util.h,v 1.1.1.5 2021/07/29 00:00:00 seiji Exp seiji $
  */
 
 #ifndef __CL_UTIL_H__
@@ -29,24 +29,28 @@
 
 typedef struct {
     cl_device_id     device ;
-    cl_program       program;
-    cl_command_queue queue  ;
     cl_context       context;
+    cl_command_queue queue  ;
+    cl_program       program;
 } cl_obj_t;
+
+// debug assertion
+#define cl_check_status(s)	cl_check_status_(__FILE__,__LINE__,s)
 
 // macro functions to handle cl_obj_t
 #define cl_query_device(obj)	((obj)->device)
-#define cl_query_program(obj)	((obj)->program)
-#define cl_query_queue(obj)	((obj)->queue)
 #define cl_query_context(obj)	((obj)->context)
+#define cl_query_queue(obj)	((obj)->queue)
+#define cl_query_program(obj)	((obj)->program)
 
 // prototypes
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-CL_UTIL_API void cl_init(cl_obj_t *, char *, cl_device_type, cl_uint, char *, char *);
-CL_UTIL_API void cl_fin (cl_obj_t *);
+CL_UTIL_API void cl_init         (cl_obj_t *, char *, cl_device_type, cl_uint, char *, char *);
+CL_UTIL_API void cl_fin          (cl_obj_t *);
+CL_UTIL_API void cl_check_status_(const char *, const int, cl_int);
 
 #ifdef __cplusplus
 }
